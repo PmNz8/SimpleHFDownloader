@@ -4,7 +4,7 @@ This simple Python application, **SimpleHFDownloader**, uses the power of [aria2
 
 **Why use SimpleHFDownloader?**
 
-Like many, I found that browser downloads were quite slow, often capping around 300-400 Mbps.  Aria2c is a command-line download utility known for its speed and efficiency, especially for large files. This tool provides a simple graphical interface to leverage aria2c for downloading Hugging Face models.
+Like many, I found that browser downloads were quite slow, often capping around 300-400 Mbps.  Aria2c is a command-line download utility known for its speed and efficiency, especially for large files. This tool provides a simple graphical interface to leverage aria2c for downloading Hugging Face models. Using 3 sessions allowed me to max out my 1 Gbps connection.
 
 **Key Features:**
 
