@@ -1,40 +1,99 @@
-# SimpleHFDownloader: Speed Up Your Hugging Face Model Downloads
+# HF GGUF Downloader
 
-This simple Python application, **SimpleHFDownloader**, uses the power of [aria2c](https://aria2.github.io/) to significantly accelerate your download speeds.
+> Unofficial project, not affiliated with Hugging Face.
 
-**Why use SimpleHFDownloader?**
+A minimal Windows desktop application for downloading complete GGUF models from Hugging Face.
+Paste a link to any GGUF shard, choose a destination directory, and select **START**. For a filename
+such as `model-00001-of-00003.gguf`, the application automatically discovers and downloads all three
+parts.
 
-Like many, I found that browser downloads were quite slow, often capping around 300-400 Mbps.  Aria2c is a command-line download utility known for its speed and efficiency, especially for large files. This tool provides a simple graphical interface to leverage aria2c for downloading Hugging Face models. Using 3 sessions allowed me to max out my 1 Gbps connection.
+![HF GGUF Downloader](gui.png)
 
-**Key Features:**
+## Features
 
-*   **Faster Downloads:**  Utilizes aria2c to download models much quicker than standard browser downloads, especially beneficial for large models.
-*   **Easy to Use:** Just copy the Hugging Face model URL (as shown below) and paste it into the application's URL field.
-*   **Multi-Part Model Support:**  Works seamlessly with models that are split into multiple parts. Simply paste the link for the *first* part of the model.
-*   **Simple Interface:** Provides a basic graphical user interface for straightforward downloading.
+- accepts a Hugging Face `resolve` URL for any `.gguf` shard,
+- automatically expands sharded filenames and verifies every expected part,
+- shows per-file and total byte progress,
+- supports cancellation while preserving resumable partial downloads,
+- reuses the Hugging Face cache and credentials,
+- works with public, private, and gated repositories,
+- builds as a single Windows EXE with PyInstaller.
 
-**How to Use:**
+## How downloads work
 
-1.  **Download and Install aria2c:**
-    *   You'll need to download `aria2c.exe`. You can get it from the official [aria2 website](https://aria2.github.io/):  Look for pre-built binaries.
-    *   **Important:** Place the `aria2c.exe` file inside the following folder:  `%appdata%\HFModelDownloader`.  You may need to create the `HFModelDownloader` folder inside `%appdata%` if it doesn't exist.
+The current successor to `huggingface-cli` is the `hf` command. Both are interfaces to the official
+`huggingface_hub` Python package. This application calls the same download backend directly because
+redirected CLI output does not provide a stable machine-readable progress stream.
 
-2.  **Run `main.py` or `main.exe` from releases:**  Execute the `main.py` script in this repository using Python.
+Direct integration lets the GUI report byte-level progress, cancel an active worker process, and keep
+the partial cache needed to resume a transfer. It also allows the runtime to be packaged without a
+separate CLI installation.
 
-3.  **Copy Hugging Face Model URL:**  Go to the Hugging Face model page and copy the download link.  **It's important to copy the correct link.**  It should look similar to this example (you'll find a download button or link on the model's files tab):
+See the official [Hugging Face CLI documentation](https://huggingface.co/docs/huggingface_hub/en/guides/cli)
+for authentication details.
 
-    ![Example of Hugging Face Download Link](https://github.com/user-attachments/assets/e108a26d-c076-4476-97ab-dc017eb993c6)
+## Run from source
 
-4.  **Paste URL into SimpleHFDownloader:** Paste the copied URL into the "URL" field in the SimpleHFDownloader application.
+Requirements:
 
-5.  **Start Download:** Click the "Start" button. The download progress will be displayed in the log window.
+- Windows,
+- Python 3.11, 3.12, or 3.13,
+- [`uv`](https://docs.astral.sh/uv/).
 
-    ![SimpleHFDownloader Screenshot](https://github.com/user-attachments/assets/99c95e4b-f514-4482-a098-1ca060dee953)
+```powershell
+uv sync --group dev
+uv run hf-gguf-downloader
+```
 
-**Important Notes:**
+Public repositories do not require authentication. For private or gated repositories, authenticate
+with the standard CLI first, or provide an `HF_TOKEN` environment variable:
 
-*   This is a very basic tool created to address a personal need for faster downloads.  It's shared in case others find it useful.
-*   Make sure `aria2c.exe` is placed in the correct location (`%appdata%\HFModelDownloader`) for the application to work.
-*   For multi-part models, always paste the link for the *first* part.
+```powershell
+uv run hf auth login
+```
 
-**Feel free to use and modify this tool as needed. If you have suggestions or improvements, contributions are welcome!**
+## Destination layout
+
+For a base directory of `E:\LLMs` and the repository `unsloth/Model-GGUF`, downloaded files are stored
+under:
+
+```text
+E:\LLMs\unsloth\Model-GGUF\<repository subdirectory>\file.gguf
+```
+
+The hidden `.cache\huggingface` directory inside the repository folder contains metadata used to skip
+completed files and resume interrupted transfers. Do not remove it during a download.
+
+## Tests and checks
+
+```powershell
+uv run pytest
+uv run ruff check .
+uv run ruff format --check src tests scripts
+```
+
+## Build the Windows EXE
+
+```powershell
+.\build.ps1
+```
+
+The build output is written to `dist\HF-GGUF-Downloader.exe`. The script only builds locally; it does
+not publish anything.
+
+When distributing the binary, include all three files from `dist`:
+
+- `HF-GGUF-Downloader.exe`,
+- `LICENSE.txt`,
+- `THIRD_PARTY_NOTICES.txt`.
+
+The executable is not digitally signed.
+
+## License
+
+The current implementation is available under the [MIT License](LICENSE). Notices and license texts
+for components bundled into the EXE are listed in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+Legacy versions in this repository remain subject to the license included with those versions.
+
+This application does not grant a license to downloaded models. Each model remains subject to the
+terms chosen by the author or owner of its Hugging Face repository.
