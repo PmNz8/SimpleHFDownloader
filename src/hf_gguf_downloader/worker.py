@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -36,6 +37,13 @@ _NULL_WRITER = _NullWriter()
 
 def run_download_worker(payload: dict[str, Any], event_queue: Any) -> None:
     """Run in a child process so cancellation can safely stop active network work."""
+
+    # The explicit maximum overrides the fixed alias's maximum, allowing 64-128 streams.
+    os.environ.setdefault("HF_XET_CLIENT_AC_MAX_DOWNLOAD_CONCURRENCY", "128")
+    os.environ.setdefault("HF_XET_FIXED_DOWNLOAD_CONCURRENCY", "64")
+    os.environ["HF_XET_HIGH_PERFORMANCE"] = "0"
+    os.environ["HF_XET_HP"] = "0"
+    os.environ.setdefault("HF_XET_TELEMETRY_ENABLED", "0")
 
     def emit(event: dict[str, Any]) -> None:
         event_queue.put(event)
@@ -84,6 +92,7 @@ def _download(payload: dict[str, Any], emit: EventEmitter) -> None:
         }
     )
 
+    transferred_bytes = 0
     for index, info in enumerate(dry_run_infos, start=1):
         if not info.will_download:
             emit(
@@ -116,6 +125,7 @@ def _download(payload: dict[str, Any], emit: EventEmitter) -> None:
             completed_before=completed_bytes,
             overall_total=total_bytes,
             expected_file_size=info.file_size,
+            transferred_before=transferred_bytes,
         )
         hf_hub_download(
             repo_id=repo_id,
@@ -125,6 +135,7 @@ def _download(payload: dict[str, Any], emit: EventEmitter) -> None:
             library_name="huggingface-cli",
             tqdm_class=progress_class,
         )
+        transferred_bytes = progress_class.transferred_bytes
         completed_bytes += info.file_size
         emit(
             {
@@ -157,8 +168,11 @@ def _progress_tqdm_factory(
     completed_before: int,
     overall_total: int,
     expected_file_size: int,
+    transferred_before: int = 0,
 ) -> type[tqdm]:
     class EventTqdm(tqdm):
+        transferred_bytes = transferred_before
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             kwargs["file"] = _NULL_WRITER
             kwargs["disable"] = False
@@ -166,7 +180,6 @@ def _progress_tqdm_factory(
             self._event_lock = threading.Lock()
             self._last_event_at = 0.0
             self._closed_event_sent = False
-            self.transfer_n = 0
             super().__init__(*args, **kwargs)
             self._emit_progress(force=True)
 
@@ -181,7 +194,7 @@ def _progress_tqdm_factory(
 
         def update_transfer(self, amount: int | float = 1) -> None:
             with self._event_lock:
-                self.transfer_n += amount
+                type(self).transferred_bytes += max(int(amount), 0)
                 self._emit_progress()
 
         def set_transfer_postfix_str(self, _value: str, refresh: bool = True) -> None:
@@ -210,6 +223,7 @@ def _progress_tqdm_factory(
                     "file_total": file_total,
                     "completed_bytes": min(completed_before + file_completed, overall_total),
                     "total_bytes": overall_total,
+                    "transferred_bytes": type(self).transferred_bytes,
                 }
             )
 
