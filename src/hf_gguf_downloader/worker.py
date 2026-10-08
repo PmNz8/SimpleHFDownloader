@@ -38,9 +38,6 @@ _NULL_WRITER = _NullWriter()
 def run_download_worker(payload: dict[str, Any], event_queue: Any) -> None:
     """Run in a child process so cancellation can safely stop active network work."""
 
-    # The explicit maximum overrides the fixed alias's maximum, allowing 64-128 streams.
-    os.environ.setdefault("HF_XET_CLIENT_AC_MAX_DOWNLOAD_CONCURRENCY", "128")
-    os.environ.setdefault("HF_XET_FIXED_DOWNLOAD_CONCURRENCY", "64")
     os.environ["HF_XET_HIGH_PERFORMANCE"] = "0"
     os.environ["HF_XET_HP"] = "0"
     os.environ.setdefault("HF_XET_TELEMETRY_ENABLED", "0")

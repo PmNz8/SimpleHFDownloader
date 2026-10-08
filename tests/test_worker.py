@@ -10,11 +10,16 @@ from hf_gguf_downloader.worker import _progress_tqdm_factory
 
 
 @pytest.mark.parametrize(
-    "overrides, minimum, maximum, telemetry",
-    [({}, 64, 128, False), ({"fixed": "8", "maximum": "32", "telemetry": "1"}, 8, 32, True)],
+    "overrides, initial, minimum, maximum, telemetry",
+    [({}, 4, 1, 64, False), ({"fixed": "8", "maximum": "32", "telemetry": "1"}, 8, 8, 32, True)],
 )
 def test_worker_configures_xet_before_download(
-    monkeypatch: pytest.MonkeyPatch, overrides: dict[str, str], minimum: int, maximum: int, telemetry: bool
+    monkeypatch: pytest.MonkeyPatch,
+    overrides: dict[str, str],
+    initial: int,
+    minimum: int,
+    maximum: int,
+    telemetry: bool,
 ) -> None:
     for name in (
         "HF_XET_FIXED_DOWNLOAD_CONCURRENCY",
@@ -43,7 +48,7 @@ def test_worker_configures_xet_before_download(
             monkeypatch.setenv(name, overrides[option])
     monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "0")
     monkeypatch.setenv("HF_XET_HP", "0")
-    standard_config = XetConfig()
+    expected_config = XetConfig()
     monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", "1")
     monkeypatch.setenv("HF_XET_HP", "1")
     events: Queue[dict[str, Any]] = Queue()
@@ -69,17 +74,25 @@ def test_worker_configures_xet_before_download(
 
     assert events.get_nowait() == {
         "type": "configuration",
-        "initial": minimum,
+        "initial": initial,
         "minimum": minimum,
         "maximum": maximum,
         "adaptive": True,
-        "buffer": standard_config.get("reconstruction.download_buffer_size"),
-        "perfile_buffer": standard_config.get("reconstruction.download_buffer_perfile_size"),
-        "buffer_limit": standard_config.get("reconstruction.download_buffer_limit"),
+        "buffer": expected_config.get("reconstruction.download_buffer_size"),
+        "perfile_buffer": expected_config.get("reconstruction.download_buffer_perfile_size"),
+        "buffer_limit": expected_config.get("reconstruction.download_buffer_limit"),
         "telemetry": telemetry,
     }
     assert os.environ["HF_XET_HIGH_PERFORMANCE"] == "0"
     assert os.environ["HF_XET_HP"] == "0"
+    if not overrides:
+        for name in (
+            "HF_XET_FIXED_DOWNLOAD_CONCURRENCY",
+            "HF_XET_CLIENT_AC_INITIAL_DOWNLOAD_CONCURRENCY",
+            "HF_XET_CLIENT_AC_MIN_DOWNLOAD_CONCURRENCY",
+            "HF_XET_CLIENT_AC_MAX_DOWNLOAD_CONCURRENCY",
+        ):
+            assert name not in os.environ
 
 
 def test_progress_class_emits_aggregate_progress() -> None:

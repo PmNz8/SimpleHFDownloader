@@ -83,7 +83,7 @@ wheels = [
 
 [[package]]
 name = "hf-gguf-downloader"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "hf-xet" },
