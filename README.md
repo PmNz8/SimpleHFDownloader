@@ -9,7 +9,7 @@ parts.
 
 ![HF GGUF Downloader](gui.png)
 
-Screenshot from v0.1.0; v0.1.1 also includes a download speed row.
+Screenshot from v0.1.0; v0.1.1 and later also include a download speed row.
 
 ## Features
 
@@ -37,11 +37,13 @@ for authentication details.
 
 ### Download concurrency
 
-The download worker sets `HF_XET_CLIENT_AC_MAX_DOWNLOAD_CONCURRENCY=128` and
-`HF_XET_FIXED_DOWNLOAD_CONCURRENCY=64` by default. In the bundled `hf-xet` version, the explicit
-maximum takes precedence over the fixed alias's maximum: transfers start at 64 parallel streams and
-adapt within the 64-128 range. These settings control transfers within a file; GGUF shards are still
-downloaded one at a time. Existing environment values for these two settings are respected.
+The download worker does not set a fixed download concurrency or override the adaptive controller's
+initial, minimum, or maximum values. The bundled `hf-xet` 1.7.0 chooses parallelism automatically:
+with default settings, it starts at 4 parallel streams and adapts within the 1-64 range. Any explicit
+Xet environment overrides you set are still respected. GGUF shards are downloaded one at a time.
+
+This restores the library-controlled concurrency used in v0.1.0 instead of v0.1.1's forced 64-128
+range. It does not revert the library to 1.5.2 or change the memory-based buffer defaults.
 
 High Performance mode is explicitly disabled through both `HF_XET_HIGH_PERFORMANCE=0` and
 `HF_XET_HP=0`. The bundled `hf-xet` 1.7.0 uses standard download buffers sized from the machine's
