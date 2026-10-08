@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import queue
+import time
 import tkinter as tk
+from collections import deque
 from contextlib import suppress
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -13,20 +15,24 @@ from .links import LinkParseError, parse_huggingface_url
 from .worker import run_download_worker
 
 _POLL_INTERVAL_MS = 100
+_SPEED_REFRESH_SECONDS = 1.0
+_SPEED_WINDOW_SECONDS = 3.0
 
 
 class DownloaderApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("HF GGUF Downloader")
-        self.root.geometry("820x215")
-        self.root.minsize(640, 215)
+        self.root.geometry("820x245")
+        self.root.minsize(640, 245)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.url = tk.StringVar()
         self.directory = tk.StringVar(value=load_download_directory())
         self.status = tk.StringVar(value="Ready")
         self.percentage = tk.StringVar(value="0%")
+        self.speed = tk.StringVar()
+        self._reset_speed()
 
         self._context = mp.get_context("spawn")
         self._event_queue: Any | None = None
@@ -59,8 +65,13 @@ class DownloaderApp:
         self.status_label = ttk.Label(self.root, textvariable=self.status, anchor="w")
         self.status_label.grid(row=3, column=0, columnspan=3, padx=12, pady=(4, 8), sticky="ew")
 
+        ttk.Label(self.root, text="Speed:").grid(row=4, column=0, padx=(12, 8), pady=(0, 8), sticky="w")
+        ttk.Label(self.root, textvariable=self.speed).grid(
+            row=4, column=1, columnspan=2, padx=(0, 12), pady=(0, 8), sticky="w"
+        )
+
         self.start_button = ttk.Button(self.root, text="START", command=self._start)
-        self.start_button.grid(row=4, column=0, columnspan=3, padx=12, pady=(2, 12), sticky="ew")
+        self.start_button.grid(row=5, column=0, columnspan=3, padx=12, pady=(2, 12), sticky="ew")
 
         self.root.bind("<Return>", lambda _event: self._start() if self._process is None else None)
         self.root.bind("<Escape>", lambda _event: self._cancel() if self._process is not None else None)
@@ -91,9 +102,11 @@ class DownloaderApp:
         self._terminal_event_seen = False
         self._cancel_requested = False
         self._dead_poll_count = 0
+        self._reset_speed()
+        payload = spec.to_worker_payload(download_root)
         self._process = self._context.Process(
             target=run_download_worker,
-            args=(spec.to_worker_payload(download_root), self._event_queue),
+            args=(payload, self._event_queue),
             name="hf-gguf-download-worker",
             daemon=True,
         )
@@ -135,6 +148,7 @@ class DownloaderApp:
 
         if self._process is None:
             return
+        self._refresh_speed()
         if process.is_alive():
             self._dead_poll_count = 0
             self.root.after(_POLL_INTERVAL_MS, self._poll_worker)
@@ -170,6 +184,7 @@ class DownloaderApp:
             )
             return
         if event_type == "progress":
+            self._network_bytes = event["transferred_bytes"]
             self._set_progress(event["completed_bytes"], event["total_bytes"])
             self.status.set(
                 f"Downloading {event['file_index']}/{event['file_count']}: "
@@ -189,6 +204,26 @@ class DownloaderApp:
         if event_type == "error":
             self._terminal_event_seen = True
             self._finish(str(event["message"]), error=True)
+
+    def _reset_speed(self) -> None:
+        self._network_bytes = 0
+        self._speed_samples: deque[tuple[float, int]] = deque([(time.monotonic(), 0)])
+        self._last_speed_at = time.monotonic() - _SPEED_REFRESH_SECONDS
+        self.speed.set("0.0 MB/s")
+
+    def _refresh_speed(self) -> None:
+        now = time.monotonic()
+        self._speed_samples.append((now, self._network_bytes))
+        cutoff = now - _SPEED_WINDOW_SECONDS
+        while len(self._speed_samples) > 1 and self._speed_samples[1][0] <= cutoff:
+            self._speed_samples.popleft()
+        if now - self._last_speed_at < _SPEED_REFRESH_SECONDS:
+            return
+        self._last_speed_at = now
+        first_time, first_bytes = self._speed_samples[0]
+        elapsed = now - first_time
+        speed = max(self._network_bytes - first_bytes, 0) / elapsed / 1_000_000 if elapsed > 0 else 0.0
+        self.speed.set(f"{speed:.1f} MB/s")
 
     def _set_progress(self, completed: int, total: int) -> None:
         percent = 100.0 if total <= 0 else min(max(completed / total * 100.0, 0.0), 100.0)
@@ -210,13 +245,15 @@ class DownloaderApp:
         self.progress.stop()
         self.status.set(message)
         self._cleanup_process()
+        self._reset_speed()
         self._set_running(False)
         if error:
             messagebox.showerror("Download error", message, parent=self.root)
 
     def _cleanup_process(self) -> None:
-        if self._process is not None:
-            self._process.join(timeout=0)
+        process = self._process if self._process is not None and self._process.pid is not None else None
+        if process is not None:
+            process.join(timeout=0)
         if self._event_queue is not None:
             self._event_queue.close()
             self._event_queue.cancel_join_thread()
@@ -238,6 +275,7 @@ class DownloaderApp:
             self._process.join(timeout=2)
             if self._process.is_alive():
                 self._process.kill()
+                self._process.join()
         self._cleanup_process()
         self.root.destroy()
 
