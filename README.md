@@ -38,7 +38,7 @@ for authentication details.
 ### Download concurrency
 
 The download worker does not set a fixed download concurrency or override the adaptive controller's
-initial, minimum, or maximum values. The bundled `hf-xet` 1.7.0 chooses parallelism automatically:
+initial, minimum, or maximum values. The bundled `hf-xet` 1.7.1 chooses parallelism automatically:
 with default settings, it starts at 4 parallel streams and adapts within the 1-64 range. Any explicit
 Xet environment overrides you set are still respected. GGUF shards are downloaded one at a time.
 
@@ -46,7 +46,7 @@ This restores the library-controlled concurrency used in v0.1.0 instead of v0.1.
 range. It does not revert the library to 1.5.2 or change the memory-based buffer defaults.
 
 High Performance mode is explicitly disabled through both `HF_XET_HIGH_PERFORMANCE=0` and
-`HF_XET_HP=0`. The bundled `hf-xet` 1.7.0 uses standard download buffers sized from the machine's
+`HF_XET_HP=0`. The bundled `hf-xet` 1.7.1 uses standard download buffers sized from the machine's
 RAM rather than fixed 2 GB / 512 MB / 8 GB values. Higher concurrency does not guarantee faster
 downloads; results depend on the network, storage, and server conditions.
 

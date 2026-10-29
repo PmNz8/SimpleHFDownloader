@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import copy_metadata
+
 # huggingface_hub exposes hf_hub_download through a lazy import. Name that
 # implementation module and the native hf_xet extension explicitly, without
 # collecting unrelated CLI and development modules from either package.
@@ -9,7 +11,8 @@ a = Analysis(
     ["launcher.py"],
     pathex=["src"],
     binaries=[],
-    datas=[],
+    # Hub checks distribution metadata to detect the native Xet backend.
+    datas=copy_metadata("hf-xet"),
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
